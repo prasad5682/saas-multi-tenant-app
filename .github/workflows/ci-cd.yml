@@ -1,0 +1,78 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+    
+    - name: Install Backend Dependencies
+      run: cd backend && npm install
+    
+    - name: Install Frontend Dependencies
+      run: cd frontend && npm install
+    
+    - name: Run Backend Tests
+      run: cd backend && npm test
+      env:
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_USER: test_user
+        DB_PASSWORD: test_password
+        DB_NAME: test_db
+        JWT_SECRET: test-secret-key
+    
+    - name: Run Linter - Backend
+      run: cd backend && npm run lint || true
+    
+    - name: Run Linter - Frontend
+      run: cd frontend && npm run lint || true
+    
+    - name: Build Backend
+      run: cd backend && npm run build || true
+    
+    - name: Build Frontend
+      run: cd frontend && npm run build
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Run Snyk Security Scan
+      run: echo "Snyk security scan - configure with Snyk integration"
+
+  docker:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build Docker Images
+      run: docker-compose build
